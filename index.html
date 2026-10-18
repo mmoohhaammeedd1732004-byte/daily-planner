@@ -26,12 +26,49 @@
     body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; display: flex; justify-content: center; }
     .app-container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 15px; }
 
+    /* شاشة البداية الفخمة (Splash Screen) */
+    #splash-screen {
+      position: fixed;
+      inset: 0;
+      background: #0b1120;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.6s ease, visibility 0.6s;
+    }
+    .splash-logo {
+      font-size: 55px;
+      margin-bottom: 10px;
+      animation: pop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .splash-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: 1px;
+    }
+    .splash-dedication {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #fbbf24; /* لون ذهبي جميل */
+      font-weight: 500;
+      background: rgba(251, 191, 36, 0.1);
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
     /* الهيدر واختيار التاريخ */
     .header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 14px; }
     .date-nav { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; position: relative; }
     .nav-btn { background: #334155; color: white; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 14px; cursor: pointer; }
     
-    /* التاريخ كزر يفتح الكالندر */
     .date-label-wrapper { position: relative; cursor: pointer; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 8px; }
     .date-label-wrapper:hover { background: rgba(255,255,255,0.1); }
     #hidden-date-picker { position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer; }
@@ -55,7 +92,7 @@
     input[type="text"] { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: white; font-size: 13px; outline: none; }
     button.btn-add { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 0 16px; font-weight: bold; cursor: pointer; }
 
-    /* خانة الملاحظات المطولة والمتمددة */
+    /* خانة الملاحظات المطولة */
     textarea#daily-notes {
       width: 100%;
       background: #0f172a;
@@ -67,7 +104,7 @@
       line-height: 1.6;
       outline: none;
       resize: vertical;
-      min-height: 140px; /* طول مريح افتراضياً */
+      min-height: 140px;
       overflow-y: hidden;
     }
 
@@ -79,6 +116,13 @@
 </head>
 <body>
 
+<!-- شاشة البداية والإهداء لعمر سراج -->
+<div id="splash-screen">
+  <div class="splash-logo">🐔✅</div>
+  <div class="splash-title">Checkenpox</div>
+  <div class="splash-dedication">✨ إهداء خاص إلى: عمر سراج ✨</div>
+</div>
+
 <div class="app-container">
 
   <!-- شريط التاريخ والمزامنة -->
@@ -86,7 +130,6 @@
     <div class="date-nav">
       <button class="nav-btn" onclick="changeDay(-1)">◀</button>
       
-      <!-- الكالندر المخفي المتصل بالنص -->
       <div class="date-label-wrapper">
         <span id="current-date-lbl">...</span>
         <span style="font-size: 12px;">📅</span>
@@ -144,6 +187,15 @@
 </div>
 
 <script>
+  // إخفاء شاشة البداية بنعومة بعد ثانيتين
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      splash.style.opacity = '0';
+      setTimeout(() => splash.style.display = 'none', 600);
+    }, 1800);
+  });
+
   const SUPABASE_URL = "https://gjtgopkprzjomowfbext.supabase.co";
   const SUPABASE_KEY = "sb_publishable_Y_gi0ZAsS3Qwj-PuvlaevA_F54PiXzK";
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -193,10 +245,8 @@
     const options = { weekday: 'short', month: 'numeric', day: 'numeric' };
     document.getElementById("current-date-lbl").innerText = (isToday ? "اليوم • " : "") + currentDate.toLocaleDateString('ar-EG', options);
     
-    // ضبط تاريخ الكالندر الداخلي ليتوافق مع التاريخ المعروض
     document.getElementById("hidden-date-picker").value = key;
 
-    // رسم الروتين
     const routineContainer = document.getElementById("routine-list");
     routineContainer.innerHTML = "";
     appData.routines.forEach(r => {
@@ -209,7 +259,6 @@
       `;
     });
 
-    // رسم المهام المخصصة
     const customContainer = document.getElementById("custom-list");
     customContainer.innerHTML = dayData.customTasks.length ? "" : `<p style="color:var(--sub); font-size:12px; text-align:center;">لا توجد مهام إضافية لليوم</p>`;
     dayData.customTasks.forEach((t, index) => {
@@ -222,13 +271,11 @@
       `;
     });
 
-    // الملاحظات
     const notesEl = document.getElementById("daily-notes");
     notesEl.value = dayData.notes || "";
     autoResize(notesEl);
   }
 
-  // تمديد الملاحظات تلقائياً حسب حجم الكلام
   function autoResize(textarea) {
     textarea.style.height = 'auto';
     textarea.style.height = Math.max(140, textarea.scrollHeight) + 'px';
@@ -277,7 +324,6 @@
     render();
   }
 
-  // اختيار تاريخ محدد من الكاليندر
   function pickExactDate(dateStr) {
     if (!dateStr) return;
     const parts = dateStr.split('-');
