@@ -7,11 +7,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="manifest" href="manifest.json">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
   <style>
     :root {
       --bg: #0f172a;
@@ -26,10 +26,16 @@
     body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; display: flex; justify-content: center; }
     .app-container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 15px; }
 
-    /* الهيدر وشريط التاريخ */
+    /* الهيدر واختيار التاريخ */
     .header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 14px; }
-    .date-nav { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+    .date-nav { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; position: relative; }
     .nav-btn { background: #334155; color: white; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 14px; cursor: pointer; }
+    
+    /* التاريخ كزر يفتح الكالندر */
+    .date-label-wrapper { position: relative; cursor: pointer; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 8px; }
+    .date-label-wrapper:hover { background: rgba(255,255,255,0.1); }
+    #hidden-date-picker { position: absolute; opacity: 0; width: 100%; height: 100%; left: 0; top: 0; cursor: pointer; }
+
     .sync-btn { background: rgba(59, 130, 246, 0.2); color: var(--blue); border: 1px solid var(--blue); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
 
     /* الكروت */
@@ -46,8 +52,24 @@
 
     /* إضافة مهمة */
     .add-box { display: flex; gap: 8px; margin-top: 10px; }
-    input[type="text"], textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: white; font-size: 13px; outline: none; }
+    input[type="text"] { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: white; font-size: 13px; outline: none; }
     button.btn-add { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 0 16px; font-weight: bold; cursor: pointer; }
+
+    /* خانة الملاحظات المطولة والمتمددة */
+    textarea#daily-notes {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      color: white;
+      font-size: 14px;
+      line-height: 1.6;
+      outline: none;
+      resize: vertical;
+      min-height: 140px; /* طول مريح افتراضياً */
+      overflow-y: hidden;
+    }
 
     /* نافذة إدارة الروتين */
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 15px; z-index: 100; }
@@ -63,7 +85,14 @@
   <div class="header">
     <div class="date-nav">
       <button class="nav-btn" onclick="changeDay(-1)">◀</button>
-      <span id="current-date-lbl">...</span>
+      
+      <!-- الكالندر المخفي المتصل بالنص -->
+      <div class="date-label-wrapper">
+        <span id="current-date-lbl">...</span>
+        <span style="font-size: 12px;">📅</span>
+        <input type="date" id="hidden-date-picker" onchange="pickExactDate(this.value)">
+      </div>
+
       <button class="nav-btn" onclick="changeDay(1)">▶</button>
     </div>
     <button class="sync-btn" onclick="syncWithCloud()">☁️ مزامنة</button>
@@ -90,12 +119,12 @@
     </div>
   </div>
 
-  <!-- 3. ملاحظات اليوم -->
+  <!-- 3. ملاحظات اليوم المطولة -->
   <div class="card">
     <div class="card-title">
       <span>📝 ملاحظات ويوميات اليوم</span>
     </div>
-    <textarea id="daily-notes" rows="3" placeholder="خواطر، ملخص اليوم، أو ملاحظات سريعة..." oninput="saveNotes()"></textarea>
+    <textarea id="daily-notes" placeholder="اكتب خواطرك وملاحظاتك هنا براحتك، المساحة تتمدد معك تلقائياً..." oninput="autoResize(this); saveNotes();"></textarea>
   </div>
 
 </div>
@@ -115,7 +144,6 @@
 </div>
 
 <script>
-  // بيانات Supabase الخاصة بمشروع chickenbox
   const SUPABASE_URL = "https://gjtgopkprzjomowfbext.supabase.co";
   const SUPABASE_KEY = "sb_publishable_Y_gi0ZAsS3Qwj-PuvlaevA_F54PiXzK";
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -123,10 +151,12 @@
   let currentDate = new Date();
 
   function getDateKey(d) {
-    return d.toISOString().split('T')[0];
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
-  // قاعدة البيانات المحلية في الهاتف (تشتغل أوفلاين بدون نت)
   let appData = JSON.parse(localStorage.getItem('my_planner_data')) || {
     routines: ["صلاة الفجر في وقتها", "ورد القرآن اليومي", "أذكار الصباح والمساء", "30 دقيقة رياضة أو حركة"],
     days: {}
@@ -162,7 +192,11 @@
     const isToday = key === getDateKey(new Date());
     const options = { weekday: 'short', month: 'numeric', day: 'numeric' };
     document.getElementById("current-date-lbl").innerText = (isToday ? "اليوم • " : "") + currentDate.toLocaleDateString('ar-EG', options);
+    
+    // ضبط تاريخ الكالندر الداخلي ليتوافق مع التاريخ المعروض
+    document.getElementById("hidden-date-picker").value = key;
 
+    // رسم الروتين
     const routineContainer = document.getElementById("routine-list");
     routineContainer.innerHTML = "";
     appData.routines.forEach(r => {
@@ -175,6 +209,7 @@
       `;
     });
 
+    // رسم المهام المخصصة
     const customContainer = document.getElementById("custom-list");
     customContainer.innerHTML = dayData.customTasks.length ? "" : `<p style="color:var(--sub); font-size:12px; text-align:center;">لا توجد مهام إضافية لليوم</p>`;
     dayData.customTasks.forEach((t, index) => {
@@ -187,7 +222,16 @@
       `;
     });
 
-    document.getElementById("daily-notes").value = dayData.notes || "";
+    // الملاحظات
+    const notesEl = document.getElementById("daily-notes");
+    notesEl.value = dayData.notes || "";
+    autoResize(notesEl);
+  }
+
+  // تمديد الملاحظات تلقائياً حسب حجم الكلام
+  function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.max(140, textarea.scrollHeight) + 'px';
   }
 
   function toggleRoutine(routineName) {
@@ -233,6 +277,14 @@
     render();
   }
 
+  // اختيار تاريخ محدد من الكاليندر
+  function pickExactDate(dateStr) {
+    if (!dateStr) return;
+    const parts = dateStr.split('-');
+    currentDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    render();
+  }
+
   function openRoutineModal() {
     const list = document.getElementById("modal-routine-list");
     list.innerHTML = "";
@@ -271,23 +323,20 @@
   async function syncWithCloud() {
     let { data: { session } } = await client.auth.getSession();
     if (!session) {
-      const email = prompt("أدخل بريدك الإلكتروني لربط المزامنة السحابية:");
+      const email = prompt("أدخل بريدك الإلكتروني للمزامنة:");
       if (!email) return;
       const password = prompt("أدخل كلمة المرور:");
       if (!password) return;
 
       let res = await client.auth.signInWithPassword({ email, password });
       if (res.error) {
-        // إنشاء حساب إن لم يكن موجوداً
         res = await client.auth.signUp({ email, password });
         if (res.error) { alert("خطأ: " + res.error.message); return; }
-        alert("تم إنشاء الحساب ومزامنة البيانات لأول مرة!");
+        alert("تم إنشاء الحساب ومزامنة البيانات!");
       }
     }
 
     const { data: { user } } = await client.auth.getUser();
-    
-    // محاولة قراءة البيانات من السحاب
     const { data } = await client.from('user_planner').select('data').eq('id', user.id).single();
     if (data && data.data) {
       appData = data.data;
@@ -295,9 +344,8 @@
       render();
     }
 
-    // حفظ أحدث نسخة في السحاب
     await client.from('user_planner').upsert({ id: user.id, data: appData });
-    alert("تمت المزامنة بنجاح! بياناتك الآن محفوظة سحابياً ☁️");
+    alert("تمت المزامنة بنجاح! بياناتك محفوظة سحابياً ☁️");
   }
 
   render();
