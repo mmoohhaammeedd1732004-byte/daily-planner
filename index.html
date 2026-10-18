@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>مفكرتي اليومية</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --primary: #10b981;
+      --blue: #3b82f6;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --sub: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Tajawal', sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; display: flex; justify-content: center; }
+    .app-container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 15px; }
+
+    /* الهيدر وشريط التاريخ */
+    .header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 12px 16px; border-radius: 14px; }
+    .date-nav { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+    .nav-btn { background: #334155; color: white; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 14px; cursor: pointer; }
+    .sync-btn { background: rgba(59, 130, 246, 0.2); color: var(--blue); border: 1px solid var(--blue); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
+
+    /* الكروت */
+    .card { background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    .card-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+    /* قوائم المهام */
+    .task-list { display: flex; flex-direction: column; gap: 8px; }
+    .task-item { display: flex; align-items: center; gap: 10px; background: #0f172a; padding: 10px 12px; border-radius: 10px; }
+    .task-item.done span { text-decoration: line-through; color: var(--sub); }
+    .checkbox { width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer; }
+    .task-text { flex: 1; font-size: 14px; }
+    .del-btn { color: var(--danger); background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 4px; }
+
+    /* إضافة مهمة */
+    .add-box { display: flex; gap: 8px; margin-top: 10px; }
+    input[type="text"], textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: white; font-size: 13px; outline: none; }
+    button.btn-add { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 0 16px; font-weight: bold; cursor: pointer; }
+
+    /* نافذة إدارة الروتين */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 15px; z-index: 100; }
+    .modal-content { background: var(--card); width: 100%; max-width: 420px; border-radius: 16px; padding: 20px; max-height: 85vh; overflow-y: auto; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- شريط التاريخ والمزامنة -->
+  <div class="header">
+    <div class="date-nav">
+      <button class="nav-btn" onclick="changeDay(-1)">◀</button>
+      <span id="current-date-lbl">...</span>
+      <button class="nav-btn" onclick="changeDay(1)">▶</button>
+    </div>
+    <button class="sync-btn" onclick="syncWithCloud()">☁️ مزامنة</button>
+  </div>
+
+  <!-- 1. قسم الروتين اليومي الثابت -->
+  <div class="card">
+    <div class="card-title">
+      <span>🔄 الروتين اليومي الثابت</span>
+      <button onclick="openRoutineModal()" style="background:none; border:none; color:var(--primary); font-size:12px; font-weight:bold; cursor:pointer;">⚙️ تعديل الروتين</button>
+    </div>
+    <div id="routine-list" class="task-list"></div>
+  </div>
+
+  <!-- 2. قسم مهام اليوم الخاصة -->
+  <div class="card">
+    <div class="card-title">
+      <span>📌 مهام خاصة باليوم</span>
+    </div>
+    <div id="custom-list" class="task-list"></div>
+    <div class="add-box">
+      <input type="text" id="new-task-input" placeholder="أضف مهمة خاصة باليوم..." onkeypress="if(event.key==='Enter') addCustomTask()">
+      <button class="btn-add" onclick="addCustomTask()">إضافة</button>
+    </div>
+  </div>
+
+  <!-- 3. ملاحظات اليوم -->
+  <div class="card">
+    <div class="card-title">
+      <span>📝 ملاحظات ويوميات اليوم</span>
+    </div>
+    <textarea id="daily-notes" rows="3" placeholder="خواطر، ملخص اليوم، أو ملاحظات سريعة..." oninput="saveNotes()"></textarea>
+  </div>
+
+</div>
+
+<!-- نافذة إدارة الروتين الثابت (Modal) -->
+<div id="routine-modal" class="modal hidden">
+  <div class="modal-content">
+    <h3 style="margin-bottom:8px; font-size:16px;">⚙️ ضبط الروتين اليومي الثابت</h3>
+    <p style="color:var(--sub); font-size:12px; margin-bottom:12px;">أي مهمة تكتبها هنا ستتكرر تلقائياً كل يوم جديد.</p>
+    <div id="modal-routine-list" class="task-list" style="margin-bottom:12px;"></div>
+    <div class="add-box" style="margin-bottom:15px;">
+      <input type="text" id="new-routine-input" placeholder="عادة يومية جديدة...">
+      <button class="btn-add" onclick="addRoutineItem()">إضافة</button>
+    </div>
+    <button onclick="closeRoutineModal()" style="width:100%; background:#334155; color:white; border:none; padding:10px; border-radius:8px; font-weight:bold;">إغلاق وحفظ</button>
+  </div>
+</div>
+
+<script>
+  // بيانات Supabase الخاصة بمشروع chickenbox
+  const SUPABASE_URL = "https://gjtgopkprzjomowfbext.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_Y_gi0ZAsS3Qwj-PuvlaevA_F54PiXzK";
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let currentDate = new Date();
+
+  function getDateKey(d) {
+    return d.toISOString().split('T')[0];
+  }
+
+  // قاعدة البيانات المحلية في الهاتف (تشتغل أوفلاين بدون نت)
+  let appData = JSON.parse(localStorage.getItem('my_planner_data')) || {
+    routines: ["صلاة الفجر في وقتها", "ورد القرآن اليومي", "أذكار الصباح والمساء", "30 دقيقة رياضة أو حركة"],
+    days: {}
+  };
+
+  function saveLocal() {
+    localStorage.setItem('my_planner_data', JSON.stringify(appData));
+  }
+
+  function getDayData(dateKey) {
+    if (!appData.days[dateKey]) {
+      appData.days[dateKey] = {
+        routineChecks: {},
+        customTasks: [],
+        notes: ""
+      };
+      appData.routines.forEach(r => appData.days[dateKey].routineChecks[r] = false);
+      saveLocal();
+    } else {
+      appData.routines.forEach(r => {
+        if (appData.days[dateKey].routineChecks[r] === undefined) {
+          appData.days[dateKey].routineChecks[r] = false;
+        }
+      });
+    }
+    return appData.days[dateKey];
+  }
+
+  function render() {
+    const key = getDateKey(currentDate);
+    const dayData = getDayData(key);
+
+    const isToday = key === getDateKey(new Date());
+    const options = { weekday: 'short', month: 'numeric', day: 'numeric' };
+    document.getElementById("current-date-lbl").innerText = (isToday ? "اليوم • " : "") + currentDate.toLocaleDateString('ar-EG', options);
+
+    const routineContainer = document.getElementById("routine-list");
+    routineContainer.innerHTML = "";
+    appData.routines.forEach(r => {
+      const isChecked = dayData.routineChecks[r] || false;
+      routineContainer.innerHTML += `
+        <div class="task-item ${isChecked ? 'done' : ''}">
+          <input type="checkbox" class="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleRoutine('${r}')">
+          <span class="task-text">${r}</span>
+        </div>
+      `;
+    });
+
+    const customContainer = document.getElementById("custom-list");
+    customContainer.innerHTML = dayData.customTasks.length ? "" : `<p style="color:var(--sub); font-size:12px; text-align:center;">لا توجد مهام إضافية لليوم</p>`;
+    dayData.customTasks.forEach((t, index) => {
+      customContainer.innerHTML += `
+        <div class="task-item ${t.done ? 'done' : ''}">
+          <input type="checkbox" class="checkbox" ${t.done ? 'checked' : ''} onchange="toggleCustom(${index})">
+          <span class="task-text">${t.text}</span>
+          <button class="del-btn" onclick="deleteCustom(${index})">✕</button>
+        </div>
+      `;
+    });
+
+    document.getElementById("daily-notes").value = dayData.notes || "";
+  }
+
+  function toggleRoutine(routineName) {
+    const dayData = getDayData(getDateKey(currentDate));
+    dayData.routineChecks[routineName] = !dayData.routineChecks[routineName];
+    saveLocal();
+    render();
+  }
+
+  function addCustomTask() {
+    const input = document.getElementById("new-task-input");
+    const val = input.value.trim();
+    if (!val) return;
+    const dayData = getDayData(getDateKey(currentDate));
+    dayData.customTasks.push({ text: val, done: false });
+    saveLocal();
+    input.value = "";
+    render();
+  }
+
+  function toggleCustom(index) {
+    const dayData = getDayData(getDateKey(currentDate));
+    dayData.customTasks[index].done = !dayData.customTasks[index].done;
+    saveLocal();
+    render();
+  }
+
+  function deleteCustom(index) {
+    const dayData = getDayData(getDateKey(currentDate));
+    dayData.customTasks.splice(index, 1);
+    saveLocal();
+    render();
+  }
+
+  function saveNotes() {
+    const dayData = getDayData(getDateKey(currentDate));
+    dayData.notes = document.getElementById("daily-notes").value;
+    saveLocal();
+  }
+
+  function changeDay(delta) {
+    currentDate.setDate(currentDate.getDate() + delta);
+    render();
+  }
+
+  function openRoutineModal() {
+    const list = document.getElementById("modal-routine-list");
+    list.innerHTML = "";
+    appData.routines.forEach((r, idx) => {
+      list.innerHTML += `
+        <div class="task-item">
+          <span class="task-text">${r}</span>
+          <button class="del-btn" onclick="deleteRoutineItem(${idx})">✕</button>
+        </div>
+      `;
+    });
+    document.getElementById("routine-modal").classList.remove("hidden");
+  }
+
+  function closeRoutineModal() {
+    document.getElementById("routine-modal").classList.add("hidden");
+    render();
+  }
+
+  function addRoutineItem() {
+    const input = document.getElementById("new-routine-input");
+    const val = input.value.trim();
+    if (!val) return;
+    appData.routines.push(val);
+    saveLocal();
+    input.value = "";
+    openRoutineModal();
+  }
+
+  function deleteRoutineItem(idx) {
+    appData.routines.splice(idx, 1);
+    saveLocal();
+    openRoutineModal();
+  }
+
+  async function syncWithCloud() {
+    let { data: { session } } = await client.auth.getSession();
+    if (!session) {
+      const email = prompt("أدخل بريدك الإلكتروني لربط المزامنة السحابية:");
+      if (!email) return;
+      const password = prompt("أدخل كلمة المرور:");
+      if (!password) return;
+
+      let res = await client.auth.signInWithPassword({ email, password });
+      if (res.error) {
+        // إنشاء حساب إن لم يكن موجوداً
+        res = await client.auth.signUp({ email, password });
+        if (res.error) { alert("خطأ: " + res.error.message); return; }
+        alert("تم إنشاء الحساب ومزامنة البيانات لأول مرة!");
+      }
+    }
+
+    const { data: { user } } = await client.auth.getUser();
+    
+    // محاولة قراءة البيانات من السحاب
+    const { data } = await client.from('user_planner').select('data').eq('id', user.id).single();
+    if (data && data.data) {
+      appData = data.data;
+      saveLocal();
+      render();
+    }
+
+    // حفظ أحدث نسخة في السحاب
+    await client.from('user_planner').upsert({ id: user.id, data: appData });
+    alert("تمت المزامنة بنجاح! بياناتك الآن محفوظة سحابياً ☁️");
+  }
+
+  render();
+</script>
+</body>
+</html>
