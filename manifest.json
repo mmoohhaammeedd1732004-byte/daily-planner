@@ -1,6 +1,6 @@
 {
-  "name": "مفكرتي اليومية",
-  "short_name": "مفكرتي",
+  "name": "Checkenpox",
+  "short_name": "Checkenpox",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
